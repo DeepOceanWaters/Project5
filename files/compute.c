@@ -10,6 +10,7 @@
 // defs...
 
 // 
+void is_perfect_range(int num);
 int is_perfect(int num);
 int is_perfect_helper(int cur, int num);
 
@@ -17,12 +18,17 @@ int main (int argc, const char * argv[])
 {
 	int num;
 	num = atoi(argv[1]);
-	if(is_perfect(num))
-		printf("%d is perfect\n", num);
-	else
-		printf("%d is not perfect\n", num);
+	is_perfect_range(num);
 	
 	return 0;
+}
+
+
+void is_perfect_range(int num)
+{
+	for(int i = 2; i <= num; i++)
+		if(is_perfect(i))
+			printf("%d is perfect\n", i);
 }
 
 
