@@ -1,10 +1,41 @@
 import socket
 import re
+ 
+COMP_PORT = 9878
+REP_PORT  = 9879
+MSG_LEN   = 8192
+
+perfect_nums = []
+cur_num = 0
 
 def main():
 	
 
-## listen_and_accpet:
+def compute():
+	# Create => bind => listen => accept the compute socket
+	sock = create_sock_stream()
+	bind_sock(sock, COMP_PORT)
+	comp_sock, comp_addr = listen_and_accept(sock, 0)
+	
+	# Get timing information, generate and send an appropriate range
+	time_str = sock.recv(MSG_LEN)
+	time_num = int(time_str)
+	max_num = get_max_num(time_num)
+	max_range = str(max_num)
+	sock.send(comp_range)
+	
+	# While compute does not signal that it's done, continue to recv
+	while True:
+		msg = sock.recv(MSG_LEN)
+		if msg == 'done':
+			return
+		nums = parse_msg(msg)
+		cur_num = int(nums[0])
+		if nums[1] == "true":
+			perfect_nums.append(cur_num)
+		
+
+## listen_and_accept:
 ##	takes a socket and the max number of backlog connects, then listens and
 ##	accepts.
 ## params:
@@ -21,6 +52,7 @@ def listen_and_accept(sock, backlog):
 ## params:
 ##	sock: socket to bind
 ##	port: port to bind socket to
+##
 def bind_sock(sock, port):
 	sock.bind((socke.gethostname(), port))
 
