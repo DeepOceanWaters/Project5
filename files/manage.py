@@ -4,6 +4,14 @@ import re
 def main():
 	
 
+## bind_sock:
+## 	takes a socket and a port and binds the socket to the port.
+## params:
+##	sock: socket to bind
+##	port: port to bind socket to
+def bind_sock(sock, port):
+	sock.bind((socke.gethostname(), port))
+
 ## create_sock:
 ## 	returns a newly created socket. Socket uses AF_INET and SOCK_STREAM
 ##
