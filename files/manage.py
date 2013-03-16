@@ -4,6 +4,18 @@ import re
 def main():
 	
 
+## listen_and_accpet:
+##	takes a socket and the max number of backlog connects, then listens and
+##	accepts.
+## params:
+##	sock: the socket to listen on
+##	backlog: the number of backlog sockets allowed
+## return: returns the sock.accept() return
+##
+def listen_and_accept(sock, backlog):
+	sock.listen(backlog)
+	return sock.accept()
+
 ## bind_sock:
 ## 	takes a socket and a port and binds the socket to the port.
 ## params:
