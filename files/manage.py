@@ -11,6 +11,15 @@ cur_num = 0
 def main():
 	
 
+## compute:
+## 	The function to call when starting the compute thread. Creates a socket
+##	to listen to for a message from a client's compute. After creating the
+##	socket, it should receive a message that details the timings of the
+##	clients computer. Then it should determine the max num in the range of
+##	numbers it will take the client about 15 seconds to compute.
+##	Finally, enters an infinite loop and waits for either a kill signal
+##	from the report thread, or for compute to return the 'done' message. 
+##
 def compute():
 	# Create => bind => listen => accept the compute socket
 	sock = create_sock_stream()
@@ -26,7 +35,7 @@ def compute():
 	
 	# While compute does not signal that it's done, continue to recv
 	while True:
-		msg = sock.recv(MSG_LEN)
+		msg = comp_sock.recv(MSG_LEN)
 		if msg == 'done':
 			return
 		nums = parse_msg(msg)
@@ -34,6 +43,66 @@ def compute():
 		if nums[1] == "true":
 			perfect_nums.append(cur_num)
 		
+## report_t:
+## 	The function to call when starting the report thread. Creates a socket
+##	to listen to for a report call. Enters an infinite loop that calls
+##	report_wait each time (i.e. it creates => listens => accepts on the
+##	created socket, then takes the msg from the report call).
+##
+def report_t():
+	# Create => bind => listen => accept the compute socket
+	sock = create_sock_stream()
+	bind_sock(sock, REP_PORT)
+	
+	while True:
+		report_wait(sock)
+	return
+
+
+## report_wait:
+##	Takes a socket and listens/accepts on that socket. Should receive a
+##	message that is either "report" or "kill".
+##	"report" => report the current state of things.
+##	"kill"   => report the current state of things, then kill all processes
+## params:
+##	sock: the socket to listen/accept on
+##
+def report_wait(sock):
+	rep_sock, rep_addr = listen_and_accept(sock, 0)
+	msg = rep_sock.recv()
+	
+	if msg == 'report':
+		report(rep_sock)
+	elif msg == 'kill':
+		report(rep_sock)
+		kill_compute()
+	else:
+		# error!
+	return
+
+
+## report:
+##	Takes a socket to send to. Creates a message and sends it to the report
+##	socket. The message contains the current number and the perfect numbers
+##	found.
+##	message format: "CUR_NUM\tP_NUM[0]\tP_NUM[1]\t...\tP_NUM[n]"
+##		example: "319\t6\t28" or "597\t6\t28\t496"
+## params:
+##	sock: the socket connected to the report calling the server for info
+##
+def report(sock):
+	msg = ''
+	msg = str(cur_num)
+	p_nums = perfect_nums
+	
+	for p_num in p_nums:
+		msg += '\t'
+		msg += str(pnum)
+	
+	sock.send(msg)
+	return
+	
+
 
 ## listen_and_accept:
 ##	takes a socket and the max number of backlog connects, then listens and
