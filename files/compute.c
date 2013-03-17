@@ -7,6 +7,7 @@
  *                                                                            *
  */
 
+
 // includes...
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,11 +15,14 @@
 #include <sys/time.h>
 #include <time.h>
 #include <math.h>
-#include <string.h>	
+#include <string.h>
+#include <sys/socket.h>	/* basic socket definitions */
 
 // defs...
-#define TEST_MAX 5000
-#define MEGA	 1000000
+#define TEST_MAX  5000
+#define MEGA	  1000000
+#define SERV_PORT 9878
+#define MAXLINE   4096
 
 // functions...
 void get_timings(char *timings);
@@ -37,9 +41,110 @@ int main (int argc, const char * argv[])
 	
 	timings = (char *) malloc(100 * sizeof(char));
 	get_timings(timings);
-	printf("timings: %s\n", timings);
+	
+	// create find perfect numbers thread/process
+	
+	// create listen on socket thread
+	
+	/* listen on socket thread */
+	// create socket
+	// bind
+	// listen & accept
+	// recv() => if == "kill"
+	// signal perfect numbers thread
+	// clean up
+	// exit
 	
 	return 0;
+}
+
+
+
+/* perfect_nums_thread
+ *
+ */
+void *perfect_nums_thread(char *ip_addr)
+{
+	/* find perfect numbers thread */
+	int sockfd;
+	int max_num;
+	struct sockaddr_in servaddr;
+	char sendline[MAXLINE];
+	char recvline[MAXLINE];
+	
+	
+	// create socket, create servaddr, & connect to server
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	servaddr = creat_servaddr(ip_addr);
+	connect(sockfd, (struct sockaddr *) &servaddr.sin_addr);
+	
+	// generate & send timings
+	get_timings(sendline);
+	write(sockfd, sendline, strlen(sendline) + 1);
+	
+	// wait to recv max_num from server
+	bzero(recvline, MAXLINE);
+	if(read(sockfd, recvline, MAXLINE) == 0){
+		perror("Something broke");
+		exit(EXIT_FAILURE);
+	}
+	if(!strcmp(recvline, "kill")) {
+		// kill
+	}
+	
+	// convert max_num from server to a num
+	// Note: might need to regex this because python sends weird chars???
+	max_num = atoi(recvline);
+	
+	is_perfect_loop(max_num, sockfd);
+	
+	return NULL;
+}
+
+
+
+/* creat_servaddr
+ *
+ */
+struct sockaddr_in creat_servaddr(char *ip_addr)
+{
+	struct sockaddr_in servaddr;
+	
+	// create servaddr
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_port = htons(SERV_PORT);
+	inet_pton(AF_INET, ip_addr, &servaddr.sin_addr);
+	
+	return servaddr;
+}
+
+
+
+/* is_perfect_loop
+ *
+ */
+void is_perfect_loop(int max_num, int sockfd)
+{
+	char sendline[MAXLINE];
+	
+	for(int i = 2; i <= max_num; i++) {
+		memcpy(sendline, '', MAXLINE);
+		if(is_perfect(i)) {
+			sprintf(sendline, "%d\ttrue", i);
+		}
+		else {
+			sprintf(sendline, "%d\tfalse", i);
+		}
+		write(sockfd, sendline, strlen(sendline) + 1);
+	}
+	memcpy(sendline, 'done', MAXLINE);
+	write(sockfd, sendline, strlen(sendline) + 1);
+	
+	// done with socket, closing it
+	close(sockfd);
+	
+	return;
 }
 
 
