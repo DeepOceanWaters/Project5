@@ -25,6 +25,15 @@
 #define MAXLINE   4096
 
 // functions...
+
+
+void child_sig(int signum);
+void parent_sig(int signum);
+void handle_sigs(int signum, void (*sa_handler)(int));
+void signal_process(int sockfd);
+void numbers_process(int sockfd, int max_num);
+struct sockaddr_in creat_servaddr(char *ip_addr);
+void is_perfect_loop(int max_num, int sockfd);
 void get_timings(char *timings);
 long long get_ops();
 double get_timed_total();
@@ -36,46 +45,20 @@ int is_perfect_helper(int cur, int num);
 
 int main (int argc, const char * argv[])
 {
-	int num;
-	char *timings;
-	
-	timings = (char *) malloc(100 * sizeof(char));
-	get_timings(timings);
-	
-	// create find perfect numbers thread/process
-	
-	// create listen on socket thread
-	
-	/* listen on socket thread */
-	// create socket
-	// bind
-	// listen & accept
-	// recv() => if == "kill"
-	// signal perfect numbers thread
-	// clean up
-	// exit
-	
-	return 0;
-}
-
-
-
-/* perfect_nums_thread
- *
- */
-void *perfect_nums_thread(char *ip_addr)
-{
-	/* find perfect numbers thread */
-	int sockfd;
-	int max_num;
 	struct sockaddr_in servaddr;
 	char sendline[MAXLINE];
-	char recvline[MAXLINE];
+	int max_num;
+	int sockfd;
 	
+	
+	if(argc < 2) {
+		printf("Please enter an ip address\n");
+		exit(EXIT_FAILURE);
+	}
 	
 	// create socket, create servaddr, & connect to server
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	servaddr = creat_servaddr(ip_addr);
+	servaddr = creat_servaddr(argv[1]);
 	connect(sockfd, (struct sockaddr *) &servaddr.sin_addr);
 	
 	// generate & send timings
@@ -83,11 +66,145 @@ void *perfect_nums_thread(char *ip_addr)
 	write(sockfd, sendline, strlen(sendline) + 1);
 	
 	// wait to recv max_num from server
+	max_num = get_max_num(sockfd);
+	
+	// create signal process
+	switch(fork()) {
+	case -1:
+		perror("Fork");
+		exit(EXIT_FAILURE);
+	case  0:
+		signal_process(sockfd);
+		_exit(EXIT_FAILURE);
+	default:
+		numbers_process(sockfd, max_num);
+		break;
+	}
+	
+	return 0;
+}
+
+
+
+/* parent_sig
+ *
+ */
+void *parent_sig(int signum)
+{
+	// do stuff
+	exit(EXIT_SUCCESS);
+}
+
+
+
+/* child_sig
+ *
+ */
+void *child_sig(int signum)
+{
+	// do stuff
+	_exit(EXIT_SUCCESS);
+}
+
+
+
+/* handle_sigs
+ * Might need more work
+ */
+void handle_sigs(int signum, void (*sa_handler)(int))
+{
+	struct sigaction s;
+	struct sigaction t;
+	
+	s.sa_flags = 0;
+	s.sa_handler = sa_handler;
+	sigemptyset(&s.sa_mask);
+	sigaction(signum, &s, &t);
+	
+	return;
+}
+
+
+
+/* signal_process
+ * NEED TO FINISH || Can still try out connection when no signal is passed tho
+ */
+void signal_process(int sockfd)
+{
+	char recvline[MAXLINE];
+	
+	// handle signals
+	handle_sigs(SIGINT,  (void *) child_sig);
+	handle_sigs(SIGHUP,  (void *) child_sig);
+	handle_sigs(SIGQUIT, (void *) child_sig);
+		
+	// go into infinite loop, waiting for a kill signal/message
+	for(;;) {
+		bzero(recvline, MAXLINE);
+		if(read(sockfd, recvline, MAXLINE) == 0){
+			perror("signal_process reading socket");
+			_exit(EXIT_FAILURE);
+		}
+		// if recvline == "kill", kill the program
+		// 	kill: Signal other process. Cleanup.
+		// else ignore
+	}
+	
+	_exit(EXIT_SUCCESS);
+}
+
+
+
+/* numbers_process
+ *
+ */
+void numbers_process(int sockfd, int max_num)
+{
+	char sendline[MAXLINE];
+	
+	// handle signals
+	handle_sigs(SIGINT,  (void *) parent_sig);
+	handle_sigs(SIGHUP,  (void *) parent_sig);
+	handle_sigs(SIGQUIT, (void *) parent_sig);
+	
+	// loop through range to check for perfect numbers
+	for(int i = 2; i <= max_num; i++) {
+		memcpy(sendline, '', MAXLINE);
+		if(is_perfect(i)) {
+			sprintf(sendline, "%d\ttrue", i);
+		}
+		else {
+			sprintf(sendline, "%d\tfalse", i);
+		}
+		write(sockfd, sendline, strlen(sendline) + 1);
+	}
+	memcpy(sendline, 'done', MAXLINE);
+	write(sockfd, sendline, strlen(sendline) + 1);
+	
+	// done with socket, closing it
+	close(sockfd);
+	
+	return;
+}
+
+
+
+/* get_max_num
+ *
+ */
+int get_max_num(int sockfd)
+{
+	char recvline[MAXLINE];
+	int max_num;
+	
+	// wait to recv max_num from server
 	bzero(recvline, MAXLINE);
 	if(read(sockfd, recvline, MAXLINE) == 0){
-		perror("Something broke");
+		perror("Reading from socket");
 		exit(EXIT_FAILURE);
 	}
+	
+	/* strcmp returns 0 if strings match */
 	if(!strcmp(recvline, "kill")) {
 		// kill
 	}
@@ -96,9 +213,7 @@ void *perfect_nums_thread(char *ip_addr)
 	// Note: might need to regex this because python sends weird chars???
 	max_num = atoi(recvline);
 	
-	is_perfect_loop(max_num, sockfd);
-	
-	return NULL;
+	return max_num;
 }
 
 
@@ -117,34 +232,6 @@ struct sockaddr_in creat_servaddr(char *ip_addr)
 	inet_pton(AF_INET, ip_addr, &servaddr.sin_addr);
 	
 	return servaddr;
-}
-
-
-
-/* is_perfect_loop
- *
- */
-void is_perfect_loop(int max_num, int sockfd)
-{
-	char sendline[MAXLINE];
-	
-	for(int i = 2; i <= max_num; i++) {
-		memcpy(sendline, '', MAXLINE);
-		if(is_perfect(i)) {
-			sprintf(sendline, "%d\ttrue", i);
-		}
-		else {
-			sprintf(sendline, "%d\tfalse", i);
-		}
-		write(sockfd, sendline, strlen(sendline) + 1);
-	}
-	memcpy(sendline, 'done', MAXLINE);
-	write(sockfd, sendline, strlen(sendline) + 1);
-	
-	// done with socket, closing it
-	close(sockfd);
-	
-	return;
 }
 
 
