@@ -137,7 +137,22 @@ void signal_process(int sockfd)
 	handle_sigs(SIGINT,  (void *) child_sig);
 	handle_sigs(SIGHUP,  (void *) child_sig);
 	handle_sigs(SIGQUIT, (void *) child_sig);
-		
+	
+	/* 30x sleep 2 seconds then read; print what is read; finally _exit() */
+	/* allow to test without going into an infinite loop */
+	for(int i = 0; i < 30; i++) {
+		sleep(2);
+		bzero(recvline, MAXLINE);
+		if(read(sockfd, recvline, MAXLINE) == 0){
+			perror("signal_process reading socket");
+			_exit(EXIT_FAILURE);
+		}
+		printf("Child recieved: %s\n", recvline);
+	}
+	_exit(EXIT_SUCCESS);
+	/* Remove this when we want to test the signal process for real */
+	/* Otherwise, don't want to go into an infinite loop by accident */
+	
 	// go into infinite loop, waiting for a kill signal/message
 	for(;;) {
 		bzero(recvline, MAXLINE);
