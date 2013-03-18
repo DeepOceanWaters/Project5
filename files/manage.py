@@ -1,8 +1,11 @@
 import math
 import re
 import socket
+import signal
+import thread
  
 SERV_PORT = 9878
+REP_PORT  = 9880
 MSG_LEN   = 4096
 GIGA	  = 1000000
 
@@ -14,8 +17,25 @@ def isodd(x): x & 1
 
 
 def main():
+	thread.start_new_thread(listen_rep, ("Report-Thread", 2))
 	compute()
+	return
 
+
+
+
+def listen_rep(thread_name, nums):
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.bind((socket.gethostname(), REP_PORT))
+	sock.listen(1024)
+	r_sock, r_addr = sock.accept()
+	r_regex = re.compile("kill");
+	msg = r_sock.recv(MSG_LEN)
+	print thread_name + ": " + msg
+	r_sock.send("information\t")
+	if len(r_regex.findall(msg)) > 0:
+		print "something" # signal and kill
+	return
 
 
 ## compute:
@@ -42,15 +62,30 @@ def compute():
 	comp_sock.send(max_range)
 	
 	cnt = 0
+	comp_bool = True
+	has_remainder = False
+	msg = ''
+	comp_msg = 'init'
+	cmp_regex = re.compile("done\t");
 	# While compute does not signal that it's done, continue to recv
-	msg = comp_sock.recv(MSG_LEN)
-	while msg not in ['', 'done']:
+	while True:
+		if comp_bool:
+			comp_msg = comp_sock.recv(MSG_LEN)
+			if len(cmp_regex.findall(comp_msg)) > 0:
+				comp_bool = False
+		else:
+			break
+		msg = msg + comp_msg
 		nums, msg = parse_results(msg)
-		for num in range(0, 2, len(nums)):
+		for num in range(0, len(nums) - 1, 2):
 			cur_num = nums[num]
 			if nums[num + 1] == 'true':
 				perfect_nums.append(cur_num)
-		msg += comp_sock.recv(MSG_LEN)
+				print "[" + max_range + "] Perfect: " + cur_num
+	
+	print "Perfect Nums"
+	for item in perfect_nums:
+		print item
 	print "I guess I am done."
 
 
@@ -183,7 +218,6 @@ def parse_results(msg):
 	for num in range(0, len(nums)):
 		nums[num] = nums[num][:-1]
 	return nums, remainder
-	
 
 
 ## parse_msg:
