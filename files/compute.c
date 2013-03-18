@@ -7,16 +7,32 @@
  *                                                                            *
  */
 
+#define _POSIX_SOURCE
 
 // includes...
+#include <sys/types.h>	/* basic system data types */
+#include <sys/socket.h>	/* basic socket definitions */
+#include <sys/time.h>	/* timeval{} for select() */
+#include <time.h>		/* timespec{} for pselect() */
+#include <netinet/in.h>	/* sockaddr_in{} and other Internet defns */
+#include <arpa/inet.h>	/* inet(3) functions */
+#include <errno.h>
+#include <fcntl.h>		/* for nonblocking */
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <time.h>
-#include <math.h>
 #include <string.h>
-#include <sys/socket.h>	/* basic socket definitions */
+#include <strings.h>     /* for bzero */
+#include <sys/stat.h>	/* for S_xxx file mode constants */
+#include <sys/uio.h>		/* for iovec{} and readv/writev */
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/select.h>
+#include <math.h>
+#include <limits.h>
+#include <sys/mman.h>
+#include <ctype.h>
+#include <signal.h>
 
 // defs...
 #define TEST_MAX  5000
@@ -25,18 +41,21 @@
 #define MAXLINE   4096
 
 // functions...
-
-
 void child_sig(int signum);
 void parent_sig(int signum);
 void handle_sigs(int signum, void (*sa_handler)(int));
+
 void signal_process(int sockfd);
 void numbers_process(int sockfd, int max_num);
+
 struct sockaddr_in creat_servaddr(char *ip_addr);
-void is_perfect_loop(int max_num, int sockfd);
+
+int get_max_num(int sockfd);
 void get_timings(char *timings);
 long long get_ops();
 double get_timed_total();
+
+void is_perfect_loop(int max_num, int sockfd);
 int is_perfect(int num);
 int is_perfect_helper(int cur, int num);
 
@@ -47,6 +66,7 @@ int main (int argc, const char * argv[])
 {
 	struct sockaddr_in servaddr;
 	char sendline[MAXLINE];
+	char ip_addr[MAXLINE];
 	int max_num;
 	int sockfd;
 	
@@ -55,11 +75,17 @@ int main (int argc, const char * argv[])
 		printf("Please enter an ip address\n");
 		exit(EXIT_FAILURE);
 	}
-	
+		
 	// create socket, create servaddr, & connect to server
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	servaddr = creat_servaddr(argv[1]);
-	connect(sockfd, (struct sockaddr *) &servaddr.sin_addr);
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_port = htons(SERV_PORT);
+	inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+	if(connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr))) {
+		perror("Problem with socket.connect()");
+		exit(EXIT_FAILURE);	
+	}
 	
 	// generate & send timings
 	get_timings(sendline);
@@ -89,7 +115,7 @@ int main (int argc, const char * argv[])
 /* parent_sig
  *
  */
-void *parent_sig(int signum)
+void parent_sig(int signum)
 {
 	// do stuff
 	exit(EXIT_SUCCESS);
@@ -100,7 +126,7 @@ void *parent_sig(int signum)
 /* child_sig
  *
  */
-void *child_sig(int signum)
+void child_sig(int signum)
 {
 	// do stuff
 	_exit(EXIT_SUCCESS);
@@ -111,18 +137,19 @@ void *child_sig(int signum)
 /* handle_sigs
  * Might need more work
  */
-void handle_sigs(int signum, void (*sa_handler)(int))
+
+void handle_sigs(int signum, void (* sa_handler)(int))
 {
 	struct sigaction s;
 	struct sigaction t;
 	
-	s.sa_flags = 0;
 	s.sa_handler = sa_handler;
 	sigemptyset(&s.sa_mask);
+	s.sa_flags = 0;
 	sigaction(signum, &s, &t);
 	
 	return;
-}
+} //*/
 
 
 
@@ -132,12 +159,21 @@ void handle_sigs(int signum, void (*sa_handler)(int))
 void signal_process(int sockfd)
 {
 	char recvline[MAXLINE];
+	//struct sigaction s;
+	//struct sigaction t;
 	
 	// handle signals
-	handle_sigs(SIGINT,  (void *) child_sig);
-	handle_sigs(SIGHUP,  (void *) child_sig);
-	handle_sigs(SIGQUIT, (void *) child_sig);
 	
+	handle_sigs(SIGINT,  child_sig);
+	handle_sigs(SIGHUP,  child_sig);
+	handle_sigs(SIGQUIT, child_sig);
+	//*/
+	/*
+	s.sa_handler = child_sig;
+	sigemptyset(&s.sa_mask);
+	s.sa_flags = 0;
+	sigaction(signum, &s, &t);
+	 //*/
 	/* 30x sleep 2 seconds then read; print what is read; finally _exit() */
 	/* allow to test without going into an infinite loop */
 	for(int i = 0; i < 30; i++) {
@@ -178,13 +214,12 @@ void numbers_process(int sockfd, int max_num)
 	char sendline[MAXLINE];
 	
 	// handle signals
-	handle_sigs(SIGINT,  (void *) parent_sig);
-	handle_sigs(SIGHUP,  (void *) parent_sig);
-	handle_sigs(SIGQUIT, (void *) parent_sig);
+	handle_sigs(SIGINT,  &parent_sig);
+	handle_sigs(SIGHUP,  &parent_sig);
+	handle_sigs(SIGQUIT, &parent_sig);
 	
 	// loop through range to check for perfect numbers
 	for(int i = 2; i <= max_num; i++) {
-		memcpy(sendline, '', MAXLINE);
 		if(is_perfect(i)) {
 			sprintf(sendline, "%d\ttrue", i);
 		}
@@ -192,8 +227,9 @@ void numbers_process(int sockfd, int max_num)
 			sprintf(sendline, "%d\tfalse", i);
 		}
 		write(sockfd, sendline, strlen(sendline) + 1);
+		bzero(sendline, MAXLINE);
 	}
-	memcpy(sendline, 'done', MAXLINE);
+	sprintf(sendline, "done");
 	write(sockfd, sendline, strlen(sendline) + 1);
 	
 	// done with socket, closing it

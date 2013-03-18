@@ -1,13 +1,17 @@
-import socket
+import math
 import re
+import socket
  
-COMP_PORT = 9878
-REP_PORT  = 8753
+SERV_PORT = 9878
 MSG_LEN   = 4096
 GIGA	  = 1000000
 
 perfect_nums = []
 cur_num = 0
+
+
+def isodd(x): x & 1
+
 
 def main():
 	compute()
@@ -25,33 +29,29 @@ def main():
 ##
 def compute():
 	# Create => bind => listen => accept the compute socket
-	listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	listen_sock.bind((socket.gethostname(), COMP_PORT))
-	print socket.gethostname()
-	listen_sock.listen(1024)
-	print "I ah aahham listennnniiinnnnnnnggggggggg"
-	(comp_sock, comp_addr) = listen_sock.accept()
-	print "I just accepted this fool"
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.bind((socket.gethostname(), SERV_PORT))
+	sock.listen(1024)
+	comp_sock, comp_addr = sock.accept()
 	
 	# Get timing information, generate and send an appropriate range
 	msg = comp_sock.recv(MSG_LEN)
-	print msg
 	timings = parse_msg(msg)
-	print timings
 	max_num = gen_range(timings)
 	max_range = str(max_num)
-	comp_sock.send(comp_range)
+	comp_sock.send(max_range)
 	
+	cnt = 0
 	# While compute does not signal that it's done, continue to recv
-	while True:
-		msg = comp_sock.recv(MSG_LEN)
-		if msg == 'done':
-			return
-		nums = parse_msg(msg)
-		cur_num = int(nums[0])
-		if nums[1] == "true":
-			perfect_nums.append(cur_num)
-			print msg
+	msg = comp_sock.recv(MSG_LEN)
+	while msg not in ['', 'done']:
+		nums, msg = parse_results(msg)
+		for num in range(0, 2, len(nums)):
+			cur_num = nums[num]
+			if nums[num + 1] == 'true':
+				perfect_nums.append(cur_num)
+		msg += comp_sock.recv(MSG_LEN)
+	print "I guess I am done."
 
 
 
@@ -165,13 +165,34 @@ def kill_compute(sock):
 	kill_msg = "shutdown"
 	sock.send(kill_msg)
 
+
+## parse_results
+##
+##
+def parse_results(msg):
+	tab_regex = re.compile("[^(\t\x00)]+\t*")
+	nums = tab_regex.findall(msg)
+	remainder = ''
+	if isodd(len(nums)):
+		remainder += nums[-1]
+		nums = nums[:-1]
+	elif nums[-1][-1] != "\t":
+		remainder += nums[-2]
+		remainder += nums[-1]
+		nums = nums[:-2]
+	for num in range(0, len(nums)):
+		nums[num] = nums[num][:-1]
+	return nums, remainder
+	
+
+
 ## parse_msg:
 ## 	takes a string, and parses it into an array of tab seperated values
 ## params:
 ## 	msg: the string to be parsed
 ##
 def parse_msg(msg):
-	tab_regex = re.compile("[^\t]+\t*?")
+	tab_regex = re.compile("[^(\t\x00)]+\t*?")
 	return tab_regex.findall(msg)
 
 
