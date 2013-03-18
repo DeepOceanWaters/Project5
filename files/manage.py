@@ -2,14 +2,17 @@ import socket
 import re
  
 COMP_PORT = 9878
-REP_PORT  = 9879
-MSG_LEN   = 8192
+REP_PORT  = 8753
+MSG_LEN   = 4096
+GIGA	  = 1000000
 
 perfect_nums = []
 cur_num = 0
 
 def main():
-	
+	compute()
+
+
 
 ## compute:
 ## 	The function to call when starting the compute thread. Creates a socket
@@ -22,16 +25,22 @@ def main():
 ##
 def compute():
 	# Create => bind => listen => accept the compute socket
-	sock = create_sock_stream()
-	bind_sock(sock, COMP_PORT)
-	comp_sock, comp_addr = listen_and_accept(sock, 0)
+	listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	listen_sock.bind((socket.gethostname(), COMP_PORT))
+	print socket.gethostname()
+	listen_sock.listen(1024)
+	print "I ah aahham listennnniiinnnnnnnggggggggg"
+	(comp_sock, comp_addr) = listen_sock.accept()
+	print "I just accepted this fool"
 	
 	# Get timing information, generate and send an appropriate range
-	time_str = sock.recv(MSG_LEN)
-	time_num = int(time_str)
-	max_num = get_max_num(time_num)
+	msg = comp_sock.recv(MSG_LEN)
+	print msg
+	timings = parse_msg(msg)
+	print timings
+	max_num = gen_range(timings)
 	max_range = str(max_num)
-	sock.send(comp_range)
+	comp_sock.send(comp_range)
 	
 	# While compute does not signal that it's done, continue to recv
 	while True:
@@ -42,7 +51,22 @@ def compute():
 		cur_num = int(nums[0])
 		if nums[1] == "true":
 			perfect_nums.append(cur_num)
-		
+			print msg
+
+
+
+## gen_range:
+##
+##
+def gen_range(timings):
+	a = 1
+	b = -1
+	c = -2 * 15 * GIGA * long(timings[1]) / long(timings[0])
+	max_num = (-b + math.sqrt(b * b - 4 * a * c)) / (2 * a)
+	return int(max_num)
+
+
+	
 ## report_t:
 ## 	The function to call when starting the report thread. Creates a socket
 ##	to listen to for a report call. Enters an infinite loop that calls
@@ -76,9 +100,9 @@ def report_wait(sock):
 	elif msg == 'kill':
 		report(rep_sock)
 		kill_compute()
-	else:
-		# error!
-	return
+	
+	# done
+
 
 
 ## report:
@@ -123,7 +147,7 @@ def listen_and_accept(sock, backlog):
 ##	port: port to bind socket to
 ##
 def bind_sock(sock, port):
-	sock.bind((socke.gethostname(), port))
+	sock.bind((socket.gethostname(), port))
 
 ## create_sock:
 ## 	returns a newly created socket. Socket uses AF_INET and SOCK_STREAM
@@ -147,7 +171,7 @@ def kill_compute(sock):
 ## 	msg: the string to be parsed
 ##
 def parse_msg(msg):
-	tab_regex = re.compile(".*?\t+")
+	tab_regex = re.compile("[^\t]+\t*?")
 	return tab_regex.findall(msg)
 
 
